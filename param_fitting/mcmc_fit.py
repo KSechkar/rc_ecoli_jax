@@ -350,7 +350,7 @@ def main():
     )
     solver = Dopri5()  # solver
     stepsize_controller = PIDController(rtol=rtol, atol=atol)  # step size controller
-    steady_state_stop = SteadyStateEvent(rtol=0.001, atol=0.001)  # stop simulation prematurely if steady state is reached
+    steady_state_stop = SteadyStateEvent(rtol=0.01, atol=0.01)  # stop simulation prematurely if steady state is reached
     diffeqsolve_forx0 = lambda x0: diffeqsolve(term, solver,
                                                args=args,
                                                t0=tf[0], t1=tf[1], dt0=0.1, y0=x0,
@@ -372,14 +372,14 @@ def main():
 
     # PREPARE: SET MCMC PARAMETERS -------------------------------------------------------------------------------------
     # Perpare to run MCMC
-    num_steps = 100 # define number of MCMC steps
+    num_steps = 10**5 # define number of MCMC steps
     prng_seed = 0 # define seed for the random number generator
     key = jax.random.PRNGKey(prng_seed) # get a key for the random number generator
 
-    init_parvec=jnp.array([0.953427, 5992.78, 4165.26, 0.000353953]) # initial value of the parameter vector
+    init_parvec=jnp.array([0.953427, 80000, 6000, 0.000353953]) # initial value of the parameter vector
     #bound_min=jnp.zeros(init_parvec.shape)  # minimum boundary: non-negative parameter values
-    bound_min = init_parvec/10  # minimum boundary
-    bound_max = init_parvec*10  # maximum boundary
+    bound_min = init_parvec/100  # minimum boundary
+    bound_max = init_parvec*100  # maximum boundary
 
     proposal_stdevs=init_parvec/5 # define the normal (with folding) proposal distribution's standard deviation
 
