@@ -64,10 +64,10 @@ def ode_fit(t, x, args):
     h = x[8]  # chloramphenicol concentration in the medium (constant)
     
     # parameter values passed with x0 for vmapping purposes
-    par_ar_aa_ratio = x[9]
-    par_K=x[10]
-    par_nu_max=x[11]
-    par_kcm=x[12]
+    par_ar_aa_ratio = jnp.exp(x[9])
+    par_K=jnp.exp(x[10])
+    par_nu_max=jnp.exp(x[11])
+    par_kcm=jnp.exp(x[12])
     
     # CALCULATE PHYSIOLOGICAL VARIABLES
     # translation elongation rate
@@ -157,6 +157,8 @@ def get_l_phir(xs_ss,   # steady-state x vector values
     Bcm = xs_ss[:,0,6]  # chloramphenicol-bound ribosomes
     s = xs_ss[:,0,7]  # nutrient quality (constant)
     h = xs_ss[:,0,8]  # chloramphenicol concentration in the medium (constant)
+
+    kcm = jnp.exp(xs_ss[:,0,12])
     
     # CALCULATE PHYSIOLOGICAL VARIABLES
     # translation elongation rate
@@ -167,7 +169,7 @@ def get_l_phir(xs_ss,   # steady-state x vector values
     e = e_calc(par, tc)
 
     # ribosome inactivation due to chloramphenicol
-    kcmh = par['kcm'] * h
+    kcmh = kcm * h
 
     # ribosome dissociation constants
     k_a = k_calc(e, par['k+_a'], par['k-_a'], par['n_a'], kcmh)
@@ -376,12 +378,12 @@ def main():
     prng_seed = 0 # define seed for the random number generator
     key = jax.random.PRNGKey(prng_seed) # get a key for the random number generator
 
-    init_parvec=jnp.array([0.953427, 80000, 6000, 0.000353953]) # initial value of the parameter vector
+    init_parvec=jnp.log(jnp.array([1, 80000, 6000, 0.000353953])) # initial value of the LOG-parameter vector
     #bound_min=jnp.zeros(init_parvec.shape)  # minimum boundary: non-negative parameter values
-    bound_min = init_parvec/100  # minimum boundary
-    bound_max = init_parvec*100  # maximum boundary
+    bound_min = init_parvec-2  # minimum boundary
+    bound_max = init_parvec+2  # maximum boundary
 
-    proposal_stdevs=init_parvec/5 # define the normal (with folding) proposal distribution's standard deviation
+    proposal_stdevs=jnp.array([0.25,0.25,0.25,0.25]) # define the normal (with folding) proposal distribution's standard deviation
 
     # RUN! -------------------------------------------------------------------------------------------------------------
     print('Running MCMC...')
