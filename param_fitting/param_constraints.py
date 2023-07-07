@@ -42,71 +42,80 @@ def plot_heatmap(loglikes,  # physiological variable to be plotted
                  colourbar_range = (None,),  # range of the colour scale
                  dimensions=(480,450)  # dimensions of the plot (width, height)
                  ):
-    # make sure nutrient qualities and gene concentration are numpy arrays
-    par_x_range = np.round(np.array(par_x_range_jnp),2)
-    par_y_range = np.round(np.array(par_y_range_jnp),2)
+    # make sure nutrient qualities and gene concentration are numpy arrays and NOT logs
+    par_x_range = np.exp(np.array(par_x_range_jnp))
+    par_y_range = np.exp(np.array(par_y_range_jnp))
+    
+    # get a meshgrid of the parameter ranges
+    par_x_mesh, par_y_mesh = np.meshgrid(par_x_range, par_y_range)
+    par_x_mesh_ravel = par_x_mesh.ravel()
+    par_y_mesh_ravel = par_y_mesh.ravel()
 
-    # make axis labels
-    par_x_range_labels = []
-    for i in range(0, len(par_x_range)):
-        if(i==0 or i==int(len(par_x_range+1)/2) or i==len(par_x_range)-1):
-            par_x_range_labels.append(str(np.round(np.exp(par_x_range[i]),2)))
-        else:
-            par_x_range_labels.append('')
-    par_y_range_labels = []
-    for i in range(0, len(par_y_range)):
-        if(i==0 or i==int(len(par_y_range+1)/2) or i==len(par_y_range)-1):
-            par_y_range_labels.append(str(np.round(np.exp(par_y_range[i]),2)))
-        else:
-            par_y_range_labels.append('')
+    # unravel the loglikes
+    loglikes_ravel=loglikes.ravel()
 
-    # make a dataframe for plotting
-    df_2d = pd.DataFrame(loglikes, columns=par_y_range_labels)
-    df_2d.columns = df_2d.columns.astype('str')
-    df_2d[par_names[0]] = par_x_range_labels
-    df_2d[par_names[0]] = df_2d[par_names[0]].astype('str')
-    df_2d = df_2d.set_index(par_names[0])
-    df_2d.columns.name = par_names[1]
-    es_df = pd.DataFrame(df_2d.stack(), columns=['log(likelihood)']).reset_index()
+    # calculate widths and heights for heatmap rectangles - unintuitive due to log scale
+    rect_widths_along_x_axis = np.zeros(len(par_x_range))
+    rect_widths_along_x_axis[0] = par_x_range[1] - par_x_range[0]
+    for i in range(1, len(par_x_range)):
+        rect_widths_along_x_axis[i] = ((par_x_range[i] - par_x_range[i - 1]) -
+                                       rect_widths_along_x_axis[i - 1] / 2) * 2
 
-    # set up the colour bar range (if not specified)
-    if(colourbar_range[0]==None):
-        colourbar_range = (min(es_df['log(likelihood)']), max(es_df['log(likelihood)']))
+    rect_heights_along_y_axis = np.zeros(len(par_y_range))
+    rect_heights_along_y_axis[0] = par_y_range[1] - par_y_range[0]
+    for i in range(1, len(par_y_range)):
+        rect_heights_along_y_axis[i] = ((par_y_range[i] - par_y_range[i - 1]) - rect_heights_along_y_axis[i - 1] / 2) * 2
 
-    # set up the graph
+    rect_widths_ravel = np.zeros(par_x_mesh_ravel.shape)
+    rect_heights_ravel = np.zeros(par_y_mesh_ravel.shape)
+    for i in range(0, len(par_x_mesh_ravel)):
+        par_x_where = np.argwhere(
+            par_x_range == par_x_mesh_ravel[i])  # locate the baseline value in the baseline range
+        rect_widths_ravel[i] = rect_widths_along_x_axis[par_x_where[0][0]] * 1.25
+        par_y_where = np.argwhere(par_y_range == par_y_mesh_ravel[i])  # locate the par_y value in the par_y range
+        rect_heights_ravel[i] = rect_heights_along_y_axis[par_y_where[0][0]] * 1.25
+
+    # make a dataframe for the heatmap of guaranteed fold changes
+    heatmap_df = pd.DataFrame({par_names[0]: par_x_mesh_ravel, par_names[1]: par_y_mesh_ravel,
+                               'log(likelihood)': loglikes_ravel,
+                               'rect_width': rect_widths_ravel, 'rect_height': rect_heights_ravel})
+
+    # PLOT guaranteed fold-changes
     figure = bkplot.figure(
-        x_axis_label=par_names[0],
-        y_axis_label=par_names[1],
-        x_range=list(df_2d.index),
-        y_range=list(df_2d.columns),
-        width=dimensions[0], height=dimensions[1],
-        tools="box_zoom,pan,hover,reset",
-        tooltips=[(par_names[0]+' = ','@{'+par_names[0]+'}'),
-                  (par_names[1]+' = ','@{'+par_names[1]+'}'),
-                  ('Log(likelihood)=', '@{log(likelihood)}')],
-        title='Log(likelihood)',
+        frame_width=240,
+        frame_height=180,
+        x_axis_label="Maximum-to-baseline expression ratio",
+        y_axis_label="Hill coefficient",
+        x_range=(min(par_x_range), max(par_x_range)),
+        y_range=(min(par_y_range), max(par_y_range)),
+        x_axis_type="log",
+        y_axis_type="log",
+        # title="F_switch value GF-changes",
+        tools='pan,box_zoom,reset,save'
     )
-    figure.grid.grid_line_color = None
-    figure.axis.axis_line_color = None
-    figure.axis.major_tick_line_color = None
-    figure.axis.major_label_text_font_size = "8pt"
-    figure.axis.major_label_standoff = 0
-    #figure.xaxis.major_label_orientation = pi/2
 
-    # plot the heatmap
-    rects = figure.rect(x=par_names[0], y=par_names[1], source=es_df,
-                       width=1, height=1,
-                       fill_color=bktransform.linear_cmap('log(likelihood)', bkpalettes.Turbo256, low=colourbar_range[0],high=colourbar_range[1]),
-                       line_color=None)
+    # plot the heatmap itself
+    rect = figure.rect(x=par_names[0], y=par_names[1], source=heatmap_df,
+                       width='rect_width', height='rect_height',
+                       fill_color=bktransform.log_cmap('log(likelihood)',
+                                                       bkpalettes.Turbo256,
+                                                       low=min(loglikes_ravel),
+                                                       high=max(loglikes_ravel)),
+                       line_width=0, line_alpha=0)
     # add colour bar
-    figure.add_layout(rects.construct_color_bar(
+    figure.add_layout(rect.construct_color_bar(
         major_label_text_font_size="8pt",
-        ticker=bkmodels.BasicTicker(desired_num_ticks=3),
-        formatter=bkmodels.PrintfTickFormatter(format="%.2f"),
+        formatter=bkmodels.PrintfTickFormatter(format="%d"),
         label_standoff=6,
         border_line_color=None,
         padding=5
-    ), 'right')
+        ), 'right')
+
+    # set fonts
+    figure.xaxis.axis_label_text_font_size = "8pt"
+    figure.xaxis.major_label_text_font_size = "8pt"
+    figure.yaxis.axis_label_text_font_size = "8pt"
+    figure.yaxis.major_label_text_font_size = "8pt"
 
     return figure
 
@@ -219,11 +228,11 @@ def main():
     parvec_default = jnp.log(jnp.array([par['a_r']/par['a_a'], par['K_e'], par['nu_max'], par['kcm']]))
 
     # define testing ranges
-    K_range = jnp.linspace(-1, 1.5, 4)+jnp.log(par['K_e'])
-    nu_max_range = jnp.linspace(-1, 1.5, 4)+jnp.log(par['nu_max'])
+    K_range = jnp.linspace(jnp.log(0.1), jnp.log(1.5), 11)+jnp.log(par['K_e'])
+    nu_max_range = jnp.linspace(jnp.log(0.1), jnp.log(1.5), 11)+jnp.log(par['nu_max'])
 
     # SIMULATE ---------------------------------------------------------------------------------------------------------
-    simulate  = True
+    simulate  = False
     if(simulate):
         # initialise the output array
         loglikes = np.zeros((K_range.shape[0], nu_max_range.shape[0]))
