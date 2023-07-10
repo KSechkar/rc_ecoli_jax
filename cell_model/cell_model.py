@@ -44,6 +44,7 @@ def nu_calc(par, tu, s):
 
 # tRNA synthesis rate
 def psi_calc(par, T, l):
+    # return par['psi_max'] * T / (T + par['tau']) * 2.5 # version without scaling by growth rate
     return par['psi_max'] * T / (T + par['tau']) * l
 
 # ribosomal gene transcription regulation function
