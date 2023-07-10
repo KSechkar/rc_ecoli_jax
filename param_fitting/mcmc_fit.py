@@ -216,7 +216,7 @@ def run_mcmc_fit(init_parvec,  # initial parameter vector
         parvecs[i,:] = np.array(parvec); loglikes[i]=loglike    # record the step
         
         # show progress
-        if(i%100==0):
+        if(i%500==0):
             print(i)
             
         # save a backup of the chain
@@ -352,7 +352,7 @@ def main():
     )
     solver = Dopri5()  # solver
     stepsize_controller = PIDController(rtol=rtol, atol=atol)  # step size controller
-    steady_state_stop = SteadyStateEvent(rtol=0.01, atol=0.01)  # stop simulation prematurely if steady state is reached
+    steady_state_stop = SteadyStateEvent(rtol=0.001, atol=0.001)  # stop simulation prematurely if steady state is reached
     diffeqsolve_forx0 = lambda x0: diffeqsolve(term, solver,
                                                args=args,
                                                t0=tf[0], t1=tf[1], dt0=0.1, y0=x0,
@@ -374,14 +374,14 @@ def main():
 
     # PREPARE: SET MCMC PARAMETERS -------------------------------------------------------------------------------------
     # Perpare to run MCMC
-    num_steps = 10**5 # define number of MCMC steps
+    num_steps = 2*(10**5) # define number of MCMC steps
     prng_seed = 0 # define seed for the random number generator
     key = jax.random.PRNGKey(prng_seed) # get a key for the random number generator
 
-    init_parvec=jnp.log(jnp.array([1, 80000, 6000, 0.000353953])) # initial value of the LOG-parameter vector
+    init_parvec=jnp.log(jnp.array([1, 37500, 6000, 0.000353953])) # initial value of the LOG-parameter vector. (37500 - new starting value! - from Giordano et al. 2016)
     #bound_min=jnp.zeros(init_parvec.shape)  # minimum boundary: non-negative parameter values
-    bound_min = init_parvec-2  # minimum boundary
-    bound_max = init_parvec+2  # maximum boundary
+    bound_min = init_parvec-jnp.log(100)  # minimum boundary
+    bound_max = init_parvec+jnp.log(100)  # maximum boundary
 
     proposal_stdevs=jnp.array([0.25,0.25,0.25,0.25]) # define the normal (with folding) proposal distribution's standard deviation
 
