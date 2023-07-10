@@ -141,10 +141,11 @@ def main():
 
     # PLOT: COMPARISON OF FITTED MODEL PREDICTIONS WITH EXPERIMENTAL DATA FROM SCOTT ET AL. 2010 -----------------------
     # get model predictions for the experimental setups
-    parvec = jnp.array([par['a_r']/par['a_a'], par['K_e'], par['nu_max'], par['kcm']])
+    parvec = jnp.log(jnp.array([par['a_r']/par['a_a'], par['K_e'], par['nu_max'], par['kcm']]))
     x0s_with_parvec = jnp.concatenate((x0s, jnp.multiply(np.ones((x0s.shape[0], len(parvec))), parvec)), axis=1)
     fitted_model_sol = vmapped_diffeqsolve_forx0s(x0s_with_parvec)
     model_predictions = get_l_phir_forxs(fitted_model_sol.ys)
+    print('SOS errors for model predictions:'+str(np.sum(np.square(np.subtract(model_predictions,exp_measurements)/exp_errors))))
 
     # initialise the plot
     bkplot.output_file('figure_plots/model_vs_scott2010.html')
