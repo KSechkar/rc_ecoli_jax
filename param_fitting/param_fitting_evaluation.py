@@ -100,9 +100,11 @@ def main():
             read_replicates.append([error_dataset[i,4],error_dataset[i,5]])
     unscaled_errors=jnp.array(read_unscaled_errors)
     replicates=jnp.array(read_replicates)
-    # exp_errors = jnp.divide(unscaled_errors,jnp.sqrt(replicates))    # scale the errors
+    #exp_errors = jnp.divide(unscaled_errors,jnp.sqrt(replicates))    # scale the errors
+    # OR don't scale the errors
+    exp_errors = unscaled_errors
     # OR use errors that we used for matlab fitting
-    exp_errors = jnp.ones(unscaled_errors.shape) * jnp.array([[error_dataset[:, 0].mean(), error_dataset[:, 2].mean()]])
+    #exp_errors = jnp.ones(unscaled_errors.shape) * jnp.array([[error_dataset[:, 0].mean(), error_dataset[:, 2].mean()]])
 
     # PREPARE: DEFINE FUNCTIONS USED IN MCMC FITTING -----------------------------------------------------------------------
     # construct initial conditions based on experimental setups -  that is, based on (s,h_ext) pairs
@@ -126,7 +128,7 @@ def main():
            )
     solver = Dopri5()   # solver
     stepsize_controller = PIDController(rtol=rtol, atol=atol)  # step size controller
-    steady_state_stop = SteadyStateEvent(rtol=0.01, atol=0.01)  # stop simulation prematurely if steady state is reached
+    steady_state_stop = SteadyStateEvent(rtol=0.0001, atol=0.0001)  # stop simulation prematurely if steady state is reached
     diffeqsolve_forx0 = lambda x0: diffeqsolve(term, solver,
                                                args=args,
                                                t0=tf[0], t1=tf[1], dt0=0.1, y0=x0,
@@ -138,39 +140,48 @@ def main():
     pmapped_diffeqsolve_forx0s=jax.pmap(diffeqsolve_forx0,in_axes=0)    # pmapped ODE integrator for several x0s in parallel
 
     get_l_phir_forxs = lambda xs_ss: get_l_phir(xs_ss,args)     # getting (l, phi_r) pairs from steady state x vector values
+    minus_sos = lambda parvec: minus_sos_for_parvec(parvec,
+                                                    vmapped_diffeqsolve_forx0s, get_l_phir_forxs,
+                                                    x0s, exp_measurements,
+                                                    exp_errors)  # objective function (returns SOS)
 
     # RETRIEVE THE FITTING OUTCOME -----------------------------------------------------------------------------------------
     # load the pickle file
-    pickle_file_name = 'fit_outcomes/' + 'mcmc_outcome_cutoff0.3_seed0_100steps' + '.pkl'
+    pickle_file_name = 'fit_outcomes/' + 'backup_save.pkl' #'mcmc_outcome_cutoff0.3_seed0_100steps' + '.pkl'
     pickle_file = open(pickle_file_name, 'rb')
     parvecs, loglikes = pickle.load(pickle_file)  # load the MCMC chain and corresponding log-likelihood values
     pickle_file.close()
 
+    # if we're loading a backup save, the unfilled fielda will be all zeros - discard them
+    for i in range(0,parvecs.shape[0]):
+        if loglikes[i]==0: # it is nearly impossible that likelihood is exactly 1 => can cut off at that value
+            first_unfilled_index=i
+            parvecs = parvecs[0:first_unfilled_index, :]
+            loglikes = loglikes[0:first_unfilled_index]
+            break
+
     # Find the mode of the sampled distribution (Maximum A Posteriori parameter estimate)
-    burn_in_steps = 0 # 5000  # number of burn-in steps to be discarded
+    burn_in_steps = 5000  # number of burn-in steps to be discarded
     map_index = jnp.argmax(loglikes[burn_in_steps:])
+    print(map_index)
     fitted_parvec = parvecs[map_index, :]
-    print('MAP parameter vector: ' + str(fitted_parvec))
+    fitted_parvec[1]-=np.log(2)
+    print('MAP parameter vector: ' + str(jnp.exp(fitted_parvec)))
     print('(Log-likelihood = ' + str(loglikes[map_index]) + ')')
 
     # Find the mode of the sampled distribution (with Gaussian kernel approximation)
-    # est_pdf = KernelDensity(kernel='gaussian', bandwidth='scott').fit(parvecs[burn_in_steps:,:])
     # timer=time.time()
-    # sample_grid_size=100
-    # sample_grid_points0=np.linspace(parvecs[burn_in_steps:,0].min(),parvecs[:,0].max(),sample_grid_size)    # sample grid points for a_r:a_a
-    # sample_grid_points1=np.linspace(parvecs[burn_in_steps:,1].min(),parvecs[:,1].max(),sample_grid_size)    # sample grid points for Ke=Kt
-    # sample_gird_points2=np.linspace(parvecs[burn_in_steps:,2].min(),parvecs[:,2].max(),sample_grid_size)    # sample grid points for nu_max
-    # sample_grid=np.array(np.meshgrid(sample_grid_points0,sample_grid_points1,sample_gird_points2)).T.reshape(-1,3) # make the sample grid
-    # print('Sample grid defined in '+str(time.time()-timer)+' seconds')
-    # timer=time.time()
-    # sampled_pdf=est_pdf.score_samples(sample_grid) # sample the log-likelihood at grid points
+    # sample_grid_size=1000
+    # for i in range(0,parvecs.shape[1]):
+    #     est_pdf = KernelDensity(kernel='gaussian', bandwidth='scott').fit(np.atleast_2d(parvecs[burn_in_steps:, i]).T)
+    #     sample_grid = np.atleast_2d(np.linspace(parvecs[burn_in_steps:, i].min(), parvecs[burn_in_steps:, i].max(), sample_grid_size)).T  # sample grid points
+    #     sampled_pdf = est_pdf.score_samples(sample_grid)  # sample the log-likelihood at grid points
+    #     fitted_parvec[i] = sample_grid[np.argmax(sampled_pdf)]  # find the mode of the log-likelihood
     # print('Sampled the log-likelihood in '+str(time.time()-timer)+' seconds')
     # timer=time.time()
-    # fitted_parvec=sample_grid[np.argmax(sampled_pdf),:] # find the mode by finding the grid point with the highest log-likelihood value
-    # print(np.max(sampled_pdf))
     # print('Found the mode in '+str(time.time()-timer)+' seconds')
-    # print('MAP parameter vector (with Gaussian kernel approximation): '+str(fitted_parvec))
-    # print('(Log-likelihood (unscaled) = '+str(minus_sos(fitted_parvec))+')')
+    # print('MAP parameter vector (with Gaussian kernel approximation): '+str(jnp.exp(fitted_parvec)))
+    # print('(Log-likelihood (unscaled) = '+str(minus_sos(jnp.array(fitted_parvec)))+')')
 
     # Get the fitted model's predictions
     x0s_with_fitted_parvec = jnp.concatenate(
@@ -181,15 +192,54 @@ def main():
     # remember the starting parameter vector for comparison
     init_parvec = parvecs[0, :]
 
-    # PLOT: the evolution of log(likelihood) ---------------------------------------------------------------------------
-    bkplot.output_file('fit_eval_figures/loglikes.html')
+    # PLOT: the evolution of log(likelihood) and parameters ------------------------------------------------------------
+    # log-likelihood
+    bkplot.output_file('fit_eval_figures/loglikes_chains.html')
     like_fig = bkplot.figure(title='Sum of squared errors',
                              x_axis_label='Step',
                              y_axis_label='SOS',
-                             frame_width=800,
-                             frame_height=450)
-    like_fig.line(np.arange(0, loglikes.shape[0]), np.array(loglikes))
-    bkplot.save(like_fig)
+                             frame_width=360,
+                             frame_height=270)
+    like_fig.line(np.arange(0, loglikes.shape[0]), loglikes)
+
+    # a_r:a_a ratio
+    ratio_fig = bkplot.figure(title='a_r:a_a ratio',
+                                x_axis_label='Step',
+                                y_axis_label='a_r:a_a',
+                                y_axis_type='log',
+                                frame_width=360,
+                                frame_height=270)
+    ratio_fig.line(np.arange(0, parvecs.shape[0]), np.exp(parvecs[:, 0]))
+
+    # Ke=Kt
+    K_fig = bkplot.figure(title='Ke=Kt',
+                            x_axis_label='Step',
+                            y_axis_label='Ke=Kt',
+                            y_axis_type='log',
+                            frame_width=360,
+                            frame_height=270)
+    K_fig.line(np.arange(0, parvecs.shape[0]), np.exp(parvecs[:, 1]))
+
+    # nu_max
+    nu_fig = bkplot.figure(title='nu_max',
+                            x_axis_label='Step',
+                            y_axis_label='nu_max',
+                            y_axis_type='log',
+                            frame_width=360,
+                            frame_height=270)
+    nu_fig.line(np.arange(0, parvecs.shape[0]), np.exp(parvecs[:, 2]))
+
+    # kcm
+    kcm_fig = bkplot.figure(title='kcm',
+                            x_axis_label='Step',
+                            y_axis_label='kcm',
+                            y_axis_type='log',
+                            frame_width=360,
+                            frame_height=270)
+    kcm_fig.line(np.arange(0, parvecs.shape[0]), np.exp(parvecs[:, 3]))
+
+
+    bkplot.save(bklayouts.grid([[like_fig, ratio_fig, K_fig],[None, nu_fig, kcm_fig]]))
 
     # PLOT: COMPARISON OF FITTED MODEL PREDICTIONS WITH EXPERIMENTAL DATA FROM SCOTT ET AL. 2010 -----------------------
     # get model predictions for the experimental setups
