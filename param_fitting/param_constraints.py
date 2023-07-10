@@ -51,71 +51,50 @@ def plot_heatmap(loglikes,  # physiological variable to be plotted
     par_x_mesh_ravel = par_x_mesh.ravel()
     par_y_mesh_ravel = par_y_mesh.ravel()
 
-    # unravel the loglikes
-    loglikes_ravel=loglikes.ravel()
-
-    # calculate widths and heights for heatmap rectangles - unintuitive due to log scale
-    rect_widths_along_x_axis = np.zeros(len(par_x_range))
-    rect_widths_along_x_axis[0] = par_x_range[1] - par_x_range[0]
-    for i in range(1, len(par_x_range)):
-        rect_widths_along_x_axis[i] = ((par_x_range[i] - par_x_range[i - 1]) -
-                                       rect_widths_along_x_axis[i - 1] / 2) * 2
-
-    rect_heights_along_y_axis = np.zeros(len(par_y_range))
-    rect_heights_along_y_axis[0] = par_y_range[1] - par_y_range[0]
-    for i in range(1, len(par_y_range)):
-        rect_heights_along_y_axis[i] = ((par_y_range[i] - par_y_range[i - 1]) - rect_heights_along_y_axis[i - 1] / 2) * 2
-
-    rect_widths_ravel = np.zeros(par_x_mesh_ravel.shape)
-    rect_heights_ravel = np.zeros(par_y_mesh_ravel.shape)
-    for i in range(0, len(par_x_mesh_ravel)):
-        par_x_where = np.argwhere(
-            par_x_range == par_x_mesh_ravel[i])  # locate the baseline value in the baseline range
-        rect_widths_ravel[i] = rect_widths_along_x_axis[par_x_where[0][0]] * 1.25
-        par_y_where = np.argwhere(par_y_range == par_y_mesh_ravel[i])  # locate the par_y value in the par_y range
-        rect_heights_ravel[i] = rect_heights_along_y_axis[par_y_where[0][0]] * 1.25
-
-    # make a dataframe for the heatmap of guaranteed fold changes
-    heatmap_df = pd.DataFrame({par_names[0]: par_x_mesh_ravel, par_names[1]: par_y_mesh_ravel,
-                               'log(likelihood)': loglikes_ravel,
-                               'rect_width': rect_widths_ravel, 'rect_height': rect_heights_ravel})
+    # minus log likelihoods for log-shading
+    minus_loglikes = -loglikes
 
     # PLOT guaranteed fold-changes
     figure = bkplot.figure(
-        frame_width=240,
+        frame_width=180,
         frame_height=180,
-        x_axis_label="Maximum-to-baseline expression ratio",
-        y_axis_label="Hill coefficient",
+        x_axis_label=par_names[0],
+        y_axis_label=par_names[1],
         x_range=(min(par_x_range), max(par_x_range)),
         y_range=(min(par_y_range), max(par_y_range)),
         x_axis_type="log",
         y_axis_type="log",
-        # title="F_switch value GF-changes",
-        tools='pan,box_zoom,reset,save'
+        tools='pan,box_zoom,reset,hover,save',
+        title='SOS errors scaled by measurement st. devs.'
     )
 
+    # svg backend
+    figure.output_backend='svg'
+
     # plot the heatmap itself
-    rect = figure.rect(x=par_names[0], y=par_names[1], source=heatmap_df,
-                       width='rect_width', height='rect_height',
-                       fill_color=bktransform.log_cmap('log(likelihood)',
-                                                       bkpalettes.Turbo256,
-                                                       low=min(loglikes_ravel),
-                                                       high=max(loglikes_ravel)),
-                       line_width=0, line_alpha=0)
-    # add colour bar
-    figure.add_layout(rect.construct_color_bar(
-        major_label_text_font_size="8pt",
-        formatter=bkmodels.PrintfTickFormatter(format="%d"),
-        label_standoff=6,
-        border_line_color=None,
-        padding=5
-        ), 'right')
+    colourmap = bkmodels.LogColorMapper(bkpalettes.Turbo256,
+                                        low=min(minus_loglikes.ravel()),
+                                        high=max(minus_loglikes.ravel()))
+    im = figure.image(image=[minus_loglikes], x=min(par_x_range), y=min(par_y_range), dw=max(par_x_range) - min(par_x_range),
+                      dh=max(par_y_range) - min(par_y_range),
+                      origin='bottom_left', anchor='bottom_left',
+                      color_mapper=colourmap)
+    figure.add_layout(im.construct_color_bar(ticker=bkmodels.FixedTicker(ticks=(250,1000,4000)),
+                                             major_label_text_font_size="8pt",),
+                      'right')
+
+    # set axis ticks
+    figure.xaxis.ticker = bkmodels.FixedTicker(ticks=[par_x_range[0],par_x_range[int(len(par_x_range)/2)],par_x_range[-1]])
+    figure.yaxis.ticker = bkmodels.FixedTicker(ticks=[par_y_range[0],par_y_range[int(len(par_y_range)/2)],par_y_range[-1]])
 
     # set fonts
     figure.xaxis.axis_label_text_font_size = "8pt"
     figure.xaxis.major_label_text_font_size = "8pt"
     figure.yaxis.axis_label_text_font_size = "8pt"
     figure.yaxis.major_label_text_font_size = "8pt"
+    figure.title.text_font_size = "8pt"
+    figure.xaxis.formatter= bkmodels.BasicTickFormatter(precision=0)
+    figure.yaxis.formatter= bkmodels.BasicTickFormatter(precision=0)
 
     return figure
 
