@@ -45,7 +45,7 @@ def plot_heatmap(loglikes,  # physiological variable to be plotted
     # make sure nutrient qualities and gene concentration are numpy arrays and NOT logs
     par_x_range = np.exp(np.array(par_x_range_jnp))
     par_y_range = np.exp(np.array(par_y_range_jnp))
-    
+
     # get a meshgrid of the parameter ranges
     par_x_mesh, par_y_mesh = np.meshgrid(par_x_range, par_y_range)
     par_x_mesh_ravel = par_x_mesh.ravel()
@@ -198,7 +198,7 @@ def main():
     get_l_phir_forxs = lambda xs_ss: get_l_phir(xs_ss,
                                                 args)  # getting (l, phi_r) pairs from steady state x vector values
     minus_sos = lambda parvec: minus_sos_for_parvec(parvec,
-                                                    vmapped_diffeqsolve_forx0s, get_l_phir_forxs,
+                                                    pmapped_diffeqsolve_forx0s, get_l_phir_forxs,
                                                     x0s, exp_measurements,
                                                     exp_errors)  # objective function (returns SOS)
 
@@ -207,18 +207,18 @@ def main():
     parvec_default = jnp.log(jnp.array([par['a_r']/par['a_a'], par['K_e'], par['nu_max'], par['kcm']]))
 
     # define testing ranges
-    K_range = jnp.linspace(jnp.log(0.1), jnp.log(1.5), 11)+jnp.log(par['K_e'])
-    nu_max_range = jnp.linspace(jnp.log(0.1), jnp.log(1.5), 11)+jnp.log(par['nu_max'])
+    K_range = jnp.linspace(jnp.log(0.1), jnp.log(30), 51) + jnp.log(par['K_e'])
+    kcm_range = jnp.linspace(jnp.log(0.1), jnp.log(30), 51)+jnp.log(par['kcm'])
 
     # SIMULATE ---------------------------------------------------------------------------------------------------------
-    simulate  = False
+    simulate  = True
     if(simulate):
         # initialise the output array
-        loglikes = np.zeros((K_range.shape[0], nu_max_range.shape[0]))
+        loglikes = np.zeros((K_range.shape[0], kcm_range.shape[0]))
 
         for i in range(0,K_range.shape[0]):
-            for j in range(0,nu_max_range.shape[0]):
-                loglikes[i,j] = minus_sos((parvec_default.at[1].set(K_range[i])).at[2].set(nu_max_range[j]))
+            for j in range(0,kcm_range.shape[0]):
+                loglikes[i,j] = minus_sos((parvec_default.at[1].set(K_range[i])).at[3].set(kcm_range[j]))
                 print((i,j))
         pickle_file_name = 'fit_outcomes/param_constraints.pkl'
         pickle_file = open(pickle_file_name, 'wb')
@@ -232,7 +232,7 @@ def main():
 
     # PLOT -------------------------------------------------------------------------------------------------------------
     bkplot.output_file('fit_eval_figures/param_constraints.html')
-    hmap_fig=plot_heatmap(loglikes,('K_e=K_nu','nu_max'),K_range,nu_max_range)
+    hmap_fig=plot_heatmap(loglikes,('K_e=K_nu','kcm'),K_range,kcm_range)
     bkplot.save(hmap_fig)
 
     return
