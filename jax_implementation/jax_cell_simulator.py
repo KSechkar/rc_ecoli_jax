@@ -6,6 +6,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 import functools
+import diffrax
 from diffrax import diffeqsolve, Dopri5, ODETerm, SaveAt, PIDController, SteadyStateEvent
 import pandas as pd
 from bokeh import plotting as bkplot, models as bkmodels, layouts as bklayouts
@@ -1240,7 +1241,7 @@ def ode_sim(par,  # dictionary with model parameters
     )
 
     # define the solver
-    solver = Dopri5()
+    solver = diffrax.Ralston()
 
     # define the time points at which we save the solution
     stepsize_controller = PIDController(rtol=rtol, atol=atol)
