@@ -1,9 +1,7 @@
-'''
-GROWTH_PHENOMENA_PREDICTION.PY: Generate figures showing how the model predicts experimentally observed growth phenomena
-'''
-# By Kirill Sechkar
+## val_model.py
+# validate the predictions of the JAX implementation of the model against experimental data
 
-# PACKAGE IMPORTS ------------------------------------------------------------------------------------------------------
+## IMPORT PACKAGES
 # multiprocessing - must be imported and handled first!
 import os
 import multiprocessing
@@ -12,65 +10,55 @@ os.environ["XLA_FLAGS"] = "--xla_force_host_platform_device_count={}".format(mul
 import numpy as np
 import jax
 import jax.numpy as jnp
-import functools
-from diffrax import diffeqsolve, Dopri5, ODETerm, SaveAt, PIDController, SteadyStateEvent
-from sklearn.neighbors import KernelDensity
 
-import pickle
 import pandas as pd
 from bokeh import plotting as bkplot, models as bkmodels, layouts as bklayouts
 
 import time
 
-# CIRCUIT IMPORTS ------------------------------------------------------------------------------------------------------
-# get top path
+## SET UP JAX
+jax.config.update('jax_platform_name', 'cpu')
+jax.config.update("jax_enable_x64", True)
+print(jax.lib.xla_bridge.get_backend().platform)
+
+## IMPORT CELL AND CIRCUIT SIMULATORS
 import sys, os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
+sys.path.append(os.path.abspath('..'))
+from jax_implementation.jax_cell_simulator import *
+from jax_implementation.het_modules.no_het import initialise as nohet_init, ode as nohet_ode, F_calc as nohet_F_calc, v as nohet_v
 
-# actually import circuit modules
-from cell_model.cell_model import *
-import het_modules.no_het as nocircuit  # import the 'no heterologous genes' module
-from param_fitting.mcmc_fit import get_l_phir, minus_sos_for_parvec, ode_fit
-
-# MAIN FUNCTION --------------------------------------------------------------------------------------------------------
+## MAIN FUNCTION
 def main():
-    # PREPARE: SET UP JAX ----------------------------------------------------------------------------------------------
-    jax.config.update('jax_platform_name', 'cpu')
-    jax.config.update("jax_enable_x64", True)
-
-    # PREPARE: INITIALISE THE CELL MODEL -----------------------------------------------------------------------------------
-    # initialise cell model
+    ## PREPARE: INITIALISE THE CELL MODEL
     cellmodel_auxil = CellModelAuxiliary()  # auxiliary tools for simulating the model and plotting simulation outcomes
     par = cellmodel_auxil.default_params()  # get default parameter values
     init_conds = cellmodel_auxil.default_init_conds(par)  # get default initial conditions
+    ode_with_circuit, circuit_F_calc, par, init_conds, circuit_genes, circuit_miscs, circuit_name2pos, circuit_styles, circuit_v = cellmodel_auxil.add_circuit(
+        nohet_init,
+        nohet_ode,
+        nohet_F_calc,
+        par, init_conds)  # load the circuit
 
-    # load synthetic gene circuit
-    ode_with_circuit, circuit_F_calc, par, init_conds, circuit_genes, circuit_miscs, circuit_name2pos, circuit_styles = cellmodel_auxil.add_circuit(
-        nocircuit.initialise,
-        nocircuit.ode,
-        nocircuit.F_calc,
-        par, init_conds)  # load the circuit - or here, the absence thereof
-
-    # PREPARE: IMPORT EXPERIMENTAL DATA FROM CHURE ET AL. 2023 -------------------------------------------------------------
+    ## PREPARE: IMPORT EXPERIMENTAL DATA FROM CHURE ET AL. 2023
     # ribosomal mass fractions vs growth rates
-    rvl_dataset = pd.read_csv('../data/exp_meas_ribosomes.csv', header=None).values
+    rvl_dataset = pd.read_csv('data/exp_meas_ribosomes.csv', header=None).values
     rvl_ls = rvl_dataset[:, 0]
     rvl_phirs = rvl_dataset[:, 1]
 
     # translation elongation rates vs growth rates
-    evl_dataset = pd.read_csv('../data/exp_meas_elongation.csv', header=None).values
+    evl_dataset = pd.read_csv('data/exp_meas_elongation.csv', header=None).values
     evl_ls = evl_dataset[:, 0]
     evl_es = evl_dataset[:, 1]
 
     # ppGpp levels vs growth rates
-    ppgppvl_dataset = pd.read_csv('../data/exp_meas_ppGpp.csv', header=None).values
+    ppgppvl_dataset = pd.read_csv('data/exp_meas_ppGpp.csv', header=None).values
     ppgppvl_ls = ppgppvl_dataset[:, 0]
     ppgppvl_ppgpps = ppgppvl_dataset[:, 1]
 
-    # PREPARE: IMPORT EXPERIMENTAL DATA FROM SCOTT ET AL. 2010 -------------------------------------------------------------
+    ## PREPARE: IMPORT EXPERIMENTAL DATA FROM SCOTT ET AL. 2010
     cutoff_growthrate=0.3    # data points with growth rates slower than this will not be considered - setting the bar high for now just to check how optimisation works
     # setups and measurements
-    dataset = pd.read_csv('../data/growth_rib_fit_notext.csv', header=None).values # read the experimental dataset (eq2 strain of Scott 2010)
+    dataset = pd.read_csv('data/growth_rib_fit_notext.csv', header=None).values # read the experimental dataset (eq2 strain of Scott 2010)
     nutr_quals = np.logspace(np.log10(0.08), np.log10(0.5), 6) # nutrient qualities are equally log-spaced points
     read_setups = []  # initialise setups array: (s,h_ext) pairs
     read_measurements = []  # intialise measurements array: (l,phi_r) pairs
@@ -88,67 +76,48 @@ def main():
     setups=jnp.array(read_setups)
     exp_measurements=jnp.array(read_measurements)
 
-    # measurement errors, scaled by 1/sqrt(no. replicates)
+    # measurement errors - average over all measurements
     read_unscaled_errors = []  # measurement errors (stdevs of samples) for (l, phi_r)
     read_replicates = []  # replicate numbers for (l, phi_r)
-    error_dataset = pd.read_csv('../data/growth_rib_fit_errors_notext.csv', header=None).values # read the experimental dataset (eq2 strain of Scott 2010)
-    for i in range(0, dataset.shape[0]):
-        if (dataset[i, 0] > cutoff_growthrate):
-            # errors
-            read_unscaled_errors.append([error_dataset[i,0], error_dataset[i,2]])
-            # replicates
-            read_replicates.append([error_dataset[i,4],error_dataset[i,5]])
-    unscaled_errors=jnp.array(read_unscaled_errors)
-    replicates=jnp.array(read_replicates)
-    # exp_errors = jnp.divide(unscaled_errors,jnp.sqrt(replicates))    # scale the errors
-    # OR use errors that we used for matlab fitting
-    exp_errors = jnp.ones(unscaled_errors.shape) * jnp.array([[error_dataset[:, 0].mean(), error_dataset[:, 2].mean()]])
+    error_dataset = pd.read_csv('data/growth_rib_fit_errors_notext.csv', header=None).values # read the experimental dataset (eq2 strain of Scott 2010)
+    exp_errors = jnp.ones(exp_measurements.shape) * jnp.array([[error_dataset[:, 0].mean(), error_dataset[:, 2].mean()]])
 
-    # PREPARE: DEFINE FUNCTIONS USED IN MCMC FITTING -----------------------------------------------------------------------
-    # construct initial conditions based on experimental setups -  that is, based on (s,h_ext) pairs
-    x0_default=cellmodel_auxil.x0_from_init_conds(init_conds,circuit_genes,circuit_miscs)   # get default x0 value
-    x0s_unswapped=jnp.multiply(np.ones((setups.shape[0], len(x0_default))), x0_default)
-    x0s_swapped_s_values=x0s_unswapped.at[:,7].set(setups[:,0]) # set s values in x0s
-    x0s = x0s_swapped_s_values.at[:,8].set(setups[:,1])# set h_ext values in x0s
-
-    # specify simulation parameters
-    tf = (0, 48)  # simulation time frame - assume that the cell is close to steady state after 1000h
-    dt_max = 0.1  # maximum integration step
+    ## SPECIFY SIMULATION PARAMETERS
+    tf = (0, 480)  # simulation time frame - assume that the cell is close to steady state after 1000h
     rtol = 1e-6; atol = 1e-6  # relative and absolute tolerances for the ODE solver
 
-    # define the objective function in terms of fitted parameter vector
-    vector_field=lambda t,y,args: ode_fit(t,y,args); term = ODETerm(vector_field)   # ODE term
-    args= (
-            par,  # model parameters
-            circuit_name2pos, # gene name - position in circuit vector decoder
-            len(circuit_genes), len(circuit_miscs), # number of genes and miscellaneous species in the circuit
-            cellmodel_auxil.synth_gene_params_for_jax(par,circuit_genes) # relevant synthetic gene parameters in jax.array form
-           )
-    solver = Dopri5()   # solver
-    stepsize_controller = PIDController(rtol=rtol, atol=atol)  # step size controller
-    steady_state_stop = SteadyStateEvent(rtol=0.001, atol=0.001)  # stop simulation prematurely if steady state is reached
-    diffeqsolve_forx0 = lambda x0: diffeqsolve(term, solver,
-                                               args=args,
-                                               t0=tf[0], t1=tf[1], dt0=0.1, y0=x0,
-                                               max_steps=None,
-                                               discrete_terminating_event=steady_state_stop,
-                                               stepsize_controller=stepsize_controller)  # ODE integrator for given x0
+    ## SIMULATE
+    model_predictions = []
+    for i in range(0,len(setups)):
+        # set the medium nutrient quality
+        sim_init_conds = cellmodel_auxil.default_init_conds(par)  # get default initial conditions
+        sim_init_conds['s'] = setups[i, 0]
 
-    vmapped_diffeqsolve_forx0s=jax.jit(jax.vmap(diffeqsolve_forx0,in_axes=0))    # vmapped ODE integrator for several x0s in parallel
-    pmapped_diffeqsolve_forx0s=jax.pmap(diffeqsolve_forx0,in_axes=0)    # pmapped ODE integrator for several x0s in parallel
+        # set the external chloramphenicol conc.
+        sim_par = par.copy()
+        sim_par['h_ext'] = setups[i, 1]
 
-    get_l_phir_forxs = lambda xs_ss: get_l_phir(xs_ss,args)     # getting (l, phi_r) pairs from steady state x vector values
+        sol = ode_sim(sim_par,  # dictionary with model parameters
+                      ode_with_circuit,  # ODE function for the cell with synthetic circuit
+                      cellmodel_auxil.x0_from_init_conds(sim_init_conds, circuit_genes, circuit_miscs),
+                      # initial condition VECTOR
+                      len(circuit_genes), len(circuit_miscs), circuit_name2pos,
+                      # dictionaries with circuit gene and miscellaneous specie names, species name to vector position decoder
+                      cellmodel_auxil.synth_gene_params_for_jax(par, circuit_genes),
+                      # synthetic gene parameters for calculating k values
+                      tf, jnp.array([tf[1]]),  # just saving the final (steady) state of the system
+                      rtol,
+                      atol)  # simulation parameters: time frame, save time step, relative and absolute tolerances
+        # get growth rate
+        _, ls, _, _,_,_,_ = cellmodel_auxil.get_e_l_Fr_nu_psi_T_D_Dnohet(sol.ts, sol.ys, par, circuit_genes, circuit_miscs, circuit_name2pos)
+        l=ls[-1]
+        # get ribosomal mass fraction
+        phi_r = float((sol.ys[-1,3]+sol.ys[-1,7])*par['n_r']/par['M'])
+        # record
+        model_predictions.append([l, phi_r])
 
-    # PLOT: COMPARISON OF FITTED MODEL PREDICTIONS WITH EXPERIMENTAL DATA FROM SCOTT ET AL. 2010 -----------------------
-    # get model predictions for the experimental setups
-    parvec = jnp.log(jnp.array([par['a_r']/par['a_a'], par['K_e'], par['nu_max'], par['kcm']]))
-    x0s_with_parvec = jnp.concatenate((x0s, jnp.multiply(np.ones((x0s.shape[0], len(parvec))), parvec)), axis=1)
-    fitted_model_sol = vmapped_diffeqsolve_forx0s(x0s_with_parvec)
-    model_predictions = get_l_phir_forxs(fitted_model_sol.ys)
-    print('SOS errors for model predictions:'+str(np.sum(np.square(np.subtract(model_predictions,exp_measurements)/exp_errors))))
-
-    # initialise the plot
-    bkplot.output_file('figure_plots/model_vs_scott2010.html')
+    ## PLOT: COMPARISON OF FITTED MODEL PREDICTIONS WITH EXPERIMENTAL DATA (BEING FITTED)
+    bkplot.output_file('model_vs_scott2010.html')
     fvd_fig = bkplot.figure(
         frame_width=640,
         frame_height=480,
@@ -163,7 +132,6 @@ def main():
     fitted_predictions_forplot=np.array(model_predictions)
     exp_errors_forplot=np.array(exp_errors)
 
-    #PLOT: COMPARISON OF MODEL PREDICTIONS WITH EXPERIMENTAL DATA FROM CHURE ET AL. 2023 -------------------------------
     # plot data and model predictions by nutrient quality
     colourind = 0
     last_nutr_qual = setups[0, 0]
@@ -186,7 +154,7 @@ def main():
                         y1=exp_measurements_forplot[i, 1] + exp_errors_forplot[i, 1],
                         line_color=colours[colourind])
 
-    # ADD GROWTH LAW FITS
+    ## ADD GROWTH LAW FITS
     # first law
     xs_1 = [[], [], [], []]
     ys_1 = [[], [], [], []]
@@ -243,9 +211,9 @@ def main():
     # save plot
     bkplot.save(fvd_fig)
 
-    # MORE REALITY VS MODEL PREDICTION COMPARISONS: GET MODEL PREDICTIONS FOR THEM -----------------------------------------
+    ## MORE REALITY VS MODEL PREDICTION COMPARISONS: GET MODEL PREDICTIONS FOR THEM
     # define nutrient qualities
-    vl_nutr_quals=np.logspace(-2,0,10)
+    vl_nutr_quals=np.logspace(-2,0,32)
 
     # initialsie output arrays
     vl_ls=np.zeros(len(vl_nutr_quals))
@@ -256,34 +224,34 @@ def main():
     # time frame for comparison simulations - longer than the one used for fitting to avoid showing non-steady state values
     vl_tf=[0,48]
 
-    vector_field = lambda t, y, args: ode_with_circuit(t, y, args)
-    term = ODETerm(vector_field)
     for i in range(0, len(vl_nutr_quals)):
-        # define initial and culture conditions
-        vl_x0 = jnp.array(cellmodel_auxil.x0_from_init_conds(init_conds, circuit_genes, circuit_miscs)
-                          ).at[7].set(vl_nutr_quals[i]) # define initial and culture conditions
+        print(vl_nutr_quals[i])
+        # set the medium nutrient quality
+        vl_init_conds = cellmodel_auxil.default_init_conds(par)  # get default initial conditions
+        vl_init_conds['s'] = vl_nutr_quals[i]  # set nutrient quality
 
-        # simulate the model
-        sol = diffeqsolve(term, solver,
-                    args=args,
-                    t0=vl_tf[0], t1=vl_tf[1], dt0=0.1, y0=vl_x0,
-                    discrete_terminating_event=steady_state_stop,
-                    max_steps=None,
-                    stepsize_controller=stepsize_controller) # integrate the ODE
+        sol = ode_sim(par,  # dictionary with model parameters
+                      ode_with_circuit,  # ODE function for the cell with synthetic circuit
+                      cellmodel_auxil.x0_from_init_conds(vl_init_conds, circuit_genes, circuit_miscs),
+                      # initial condition VECTOR
+                      len(circuit_genes), len(circuit_miscs), circuit_name2pos,
+                      # dictionaries with circuit gene and miscellaneous specie names, species name to vector position decoder
+                      cellmodel_auxil.synth_gene_params_for_jax(par, circuit_genes),
+                      # synthetic gene parameters for calculating k values
+                      tf, jnp.array([tf[1]]),  # just saving the final (steady) state of the system
+                      rtol,
+                      atol)  # simulation parameters: time frame, save time step, relative and absolute tolerances
+        # translation elongation rate, growth rate and inverse of ppGpp level
+        es, ls, _, _, _, Ts, _ = cellmodel_auxil.get_e_l_Fr_nu_psi_T_D_Dnohet(sol.ts, sol.ys, par, circuit_genes,
+                                                                               circuit_miscs, circuit_name2pos)
+        vl_es[i] = es[-1]
+        vl_ls[i] = ls[-1]
+        vl_ppgpps[i] = 1 / Ts[-1]
+        # get ribosomal mass fraction
+        vl_phirs[i]=float(sol.ys[-1, 3] * par['n_r'] / par['M'])
 
-        # retrieve the steady-state growth rate, ribosomal mass fraction, translation elongation rate and ppGpp level
-        e,l,_,_,_,T,_,_=cellmodel_auxil.get_e_l_Fr_nu_psi_T_D_Dnohet(sol.ts, sol.ys,
-                                                                     par,
-                                                                     circuit_genes, circuit_miscs, circuit_name2pos)
-        vl_es[i]=np.array(e)[0]  # record steady-state translation elongation rate
-        vl_ls[i]=np.array(l)[0]  # record steady-state growth rate
-        vl_ppgpps[i] = 1 / np.array(T)[0] # record (relative) steady-state ppGpp level
-        vl_phirs[i]=np.array(sol.ys)[0,3]*par['n_r']/par['M'] # record steady-state ribosomal mass fraction
-
-        print(i)
-
-    # MORE REALITY VS MODEL PREDICTION COMPARISONS: MAKE PLOTS -------------------------------------------------------------
-    bkplot.output_file('figure_plots/model_vs_chure2023.html')
+    ## MORE REALITY VS MODEL PREDICTION COMPARISONS: MAKE PLOTS
+    bkplot.output_file('model_vs_chure2023.html')
     # plot ribosomal mass fractions vs growth rates
     rvl_fig = bkplot.figure(frame_width=400,
                             frame_height=400,
@@ -329,8 +297,6 @@ def main():
     bkplot.save(bklayouts.grid([[rvl_fig,evl_fig],[ppgppvl_fig,None]]))
     return
 
-# MAIN CALL ------------------------------------------------------------------------------------------------------------
+## MAIN CALL
 if __name__ == '__main__':
     main()
-
-
