@@ -1726,7 +1726,7 @@ def gen_stoich_mat(par,
 ## MAIN FUNCTION (for testing)
 def main():
     # set up jax
-    jax.config.update('jax_platform_name', 'cpu')
+    jax.config.update('jax_platform_name', 'gpu')
     jax.config.update("jax_enable_x64", True)
 
     # initialise cell model

@@ -294,8 +294,8 @@ end
 toc
 
 %% FIND pre-disturbance means to plot relative trajectories
-t_in_frame_predist_openloop=(ts_openloop{1}>=0)&(ts_openloop{1}<=7.5);
-t_in_frame_predist=(ts{1}>=0)&(ts{1}<=7.5);
+t_in_frame_predist_openloop=(ts_openloop{1}>=5)&(ts_openloop{1}<=7.5);
+t_in_frame_predist=(ts{1}>=5)&(ts{1}<=7.5);
 
 % psens - open loop
 psens_trajs_openloop_concatenated=cat(2,psens_trajs_openloop{:});
@@ -331,7 +331,7 @@ hold on
 dist_time=0;
 % open loop plots
 for traj_cntr=1:num_trajs
-    t_in_frame=(ts_openloop{traj_cntr}>=0)&(ts_openloop{traj_cntr}<=12.5);
+    t_in_frame=(ts_openloop{traj_cntr}>=5)&(ts_openloop{traj_cntr}<=12.5);
     plot(ts_openloop{traj_cntr}(t_in_frame)-dist_time,psens_trajs_openloop{traj_cntr}(t_in_frame)./psens_refmean_openloop,'Color',[0.6350 0.0780 0.1840 1])
 end
 
@@ -341,7 +341,7 @@ plot(ts_openloop{1}(t_in_frame)-dist_time,avg_psens_traj_openloop(t_in_frame)./p
 
 % closed loop plots
 for traj_cntr=1:num_trajs
-    t_in_frame=(ts{traj_cntr}>=0)&(ts{traj_cntr}<=12.5);
+    t_in_frame=(ts{traj_cntr}>=5)&(ts{traj_cntr}<=12.5);
     plot(ts{traj_cntr}(t_in_frame)-dist_time,psens_trajs{traj_cntr}(t_in_frame)./psens_refmean,'Color',[0 0.4470 0.7410 0.05])
 end
 % average trajectory

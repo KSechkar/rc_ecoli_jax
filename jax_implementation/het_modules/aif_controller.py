@@ -120,7 +120,7 @@ def F_calc(t ,x, par, name2pos):
             (par['K_dna(amp)-act'] ** par['eta_dna(amp)-act'] + p_act ** par['eta_dna(amp)-act'])
 
     # disturbance gene: activated after certain time
-    F_dist = lax.select(t>par['t_dist_on'], 1, 0)
+    F_dist = jnp.array(t>par['t_dist_on'],int)
 
     return jnp.array([F_sens,    # burden sensor, activates m_anti exp
              F_anti,    # antisense RNA, annihilates m_act
