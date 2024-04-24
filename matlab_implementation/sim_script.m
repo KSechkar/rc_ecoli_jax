@@ -11,7 +11,7 @@ clear
 
 %% DEFINE number of trajectories and how we simulate the trajectories
 
-num_trajs=1;
+num_trajs=48;
 
 %% INITIALISE stochastic trajectory arrays and simulators
 
@@ -56,10 +56,10 @@ parfor traj_cntr=1:num_trajs
     sim{traj_cntr}=sim{traj_cntr}.generate_het_stoichiometry_matrix();
     
     % disturbance signal parameters
-    sim{traj_cntr}.ext.input_func_parameters('inducer_base_level')=0; % disturbance flicks transcription reg. func. from 0 to 1 at t=72
-    sim{traj_cntr}.ext.input_func_parameters('inducer_final_level')=1; % disturbance flicks transcription reg. func. from 0 to 1 at t=72
-    sim{traj_cntr}.ext.input_func_parameters('step_time')=dist_time; % disturbance flicks transcription reg. func. from 0 to 1 at t=72
-    sim{traj_cntr}.ext.input_func_parameters('slope_duration')=0.1;% disturbance flicks transcription reg. func. from 0 to 1 at t=72
+    sim{traj_cntr}.ext.input_func_parameters('inducer_base_level')=0; % disturbance flicks transcription reg. func. from 0 to 1 
+    sim{traj_cntr}.ext.input_func_parameters('inducer_final_level')=1; % disturbance flicks transcription reg. func. from 0 to 1 
+    sim{traj_cntr}.ext.input_func_parameters('step_time')=dist_time; % disturbance flicks transcription reg. func. from 0 to 1 
+    sim{traj_cntr}.ext.input_func_parameters('slope_duration')=0.1;% disturbance flicks transcription reg. func. from 0 to 1 
     
     sim{traj_cntr}.het.parameters('c_dist')=100; % gene copy number
     sim{traj_cntr}.het.parameters('a_dist')=500; % max. gene transcription rate
@@ -88,7 +88,7 @@ parfor traj_cntr=1:num_trajs
     sim{traj_cntr}=sim{traj_cntr}.push_het();
     
     % STOCHASTIC simulation parameters
-    sim{traj_cntr}.tf=0.01; % simulation time frame
+    sim{traj_cntr}.tf=15; % simulation time frame
     sim{traj_cntr}.record_time_step=1e-3;
     sim{traj_cntr}.tau_step=1e-6;
     sim{traj_cntr}.euler_step=1e-7;
@@ -97,9 +97,9 @@ parfor traj_cntr=1:num_trajs
     % deterministic simulation parameters
     sim{traj_cntr}.opt = odeset('reltol',1.e-6,'abstol',1.e-9);
     
-    % 72h to get steady state
+    % 24h to get steady state
     tf_original=sim{traj_cntr}.tf;
-    sim{traj_cntr}.tf=72;
+    sim{traj_cntr}.tf=24;
     
     % no disturbance
     inducer_base_level_original=sim{traj_cntr}.ext.input_func_parameters('inducer_base_level');
@@ -170,126 +170,126 @@ parfor traj_cntr=1:num_trajs
     D_trajs{traj_cntr}=(calculated.Ds);
 
     %% OPEN LOOP
-    sim_openloop{traj_cntr}=cell_simulator;
-
-    sim_openloop{traj_cntr}.init_conditions('s')=sim{traj_cntr}.init_conditions('s');
-    
-    sim_openloop{traj_cntr}=sim_openloop{traj_cntr}.load_heterologous_and_external('aif_controller','step_inducer'); % load the het. gene and ext. inp. modules
-    sim_openloop{traj_cntr}=sim_openloop{traj_cntr}.generate_het_stoichiometry_matrix();
-    
-    % disturbance signal parameters
-    sim_openloop{traj_cntr}.ext.input_func_parameters('inducer_base_level')=sim{traj_cntr}.ext.input_func_parameters('inducer_base_level');
-    sim_openloop{traj_cntr}.ext.input_func_parameters('inducer_final_level')=sim{traj_cntr}.ext.input_func_parameters('inducer_final_level');
-    sim_openloop{traj_cntr}.ext.input_func_parameters('step_time')=sim{traj_cntr}.ext.input_func_parameters('step_time');
-    sim_openloop{traj_cntr}.ext.input_func_parameters('slope_duration')=sim{traj_cntr}.ext.input_func_parameters('slope_duration');
-    
-    sim_openloop{traj_cntr}.het.parameters('c_dist')=sim{traj_cntr}.het.parameters('c_dist');
-    sim_openloop{traj_cntr}.het.parameters('a_dist')=sim{traj_cntr}.het.parameters('a_dist');
-    
-    % no output protein expression here
-    sim_openloop{traj_cntr}.het.parameters('c_x')=sim{traj_cntr}.het.parameters('c_x');
-    sim_openloop{traj_cntr}.het.parameters('a_x')=sim{traj_cntr}.het.parameters('a_x');
-    
-    % integral controller parameters
-    sim_openloop{traj_cntr}.het.parameters('K_dna(anti)-sens')=sim{traj_cntr}.het.parameters('K_dna(anti)-sens');
-    sim_openloop{traj_cntr}.het.parameters('eta_dna(anti)-sens')=sim{traj_cntr}.het.parameters('eta_dna(anti)-sens');
-    
-    sim_openloop{traj_cntr}.het.parameters('K_dna(amp)-act')=sim{traj_cntr}.het.parameters('K_dna(amp)-act');
-    sim_openloop{traj_cntr}.het.parameters('eta_dna(amp)-act')=sim{traj_cntr}.het.parameters('eta_dna(amp)-act');
-    
-    sim_openloop{traj_cntr}.het.parameters('kb_anti')=sim{traj_cntr}.het.parameters('kb_anti'); % atcuator-annihilator binding rate constant
-    sim_openloop{traj_cntr}.het.parameters('c_sens')=sim{traj_cntr}.het.parameters('c_sens');
-    sim_openloop{traj_cntr}.het.parameters('a_sens')=sim{traj_cntr}.het.parameters('a_sens'); % sensor gene transcription rate
-
-    % all other controller genes on zero
-    sim_openloop{traj_cntr}.het.parameters('c_anti')=0; % annigilator transcription rate
-    sim_openloop{traj_cntr}.het.parameters('c_act')=0; % actuator transcription rate
-    sim_openloop{traj_cntr}.het.parameters('c_amp')=0; % integral controller amplifier gene copy number
-       
-    % push amended parameter values
-    sim_openloop{traj_cntr}=sim_openloop{traj_cntr}.push_het();
-    
-    % STOCHASTIC simulation parameters
-    sim_openloop{traj_cntr}.tf=sim{traj_cntr}.tf; % simulation time frame
-    sim_openloop{traj_cntr}.record_time_step=sim{traj_cntr}.record_time_step;
-    sim_openloop{traj_cntr}.tau_step=sim{traj_cntr}.tau_step;
-    
-    % GET the steady state deterministically to avopid waiting for the system to equilibrate in Gillespie simulations
-    % deterministic simulation parameters
-    sim_openloop{traj_cntr}.opt = odeset('reltol',1.e-6,'abstol',1.e-9);
-    
-    % 72h to get steady state
-    tf_original=sim_openloop{traj_cntr}.tf;
-    sim_openloop{traj_cntr}.tf=72;
-    
-    % no disturbance
-    inducer_base_level_original=sim_openloop{traj_cntr}.ext.input_func_parameters('inducer_base_level');
-    inducer_final_level=sim_openloop{traj_cntr}.ext.input_func_parameters('inducer_final_level');
-    sim_openloop{traj_cntr}.ext.input_func_parameters('inducer_base_level') = 0;
-    sim_openloop{traj_cntr}.ext.input_func_parameters('inducer_final_level') = 0;
-    
-    % simulate and get steady state
-    sim_openloop{traj_cntr}=sim_openloop{traj_cntr}.generate_het_stoichiometry_matrix();
-    sim_openloop{traj_cntr}=sim_openloop{traj_cntr}.simulate_model();
-    
-    % restore simulation time frame
-    sim_openloop{traj_cntr}.tf=tf_original;
-    
-    % restore distrubance parameters
-    sim_openloop{traj_cntr}.ext.input_func_parameters('inducer_base_level') = inducer_base_level_original;
-    sim_openloop{traj_cntr}.ext.input_func_parameters('inducer_final_level') = inducer_final_level;
-
-    % get steady state
-    det_steady_state_openloop = sim_openloop{traj_cntr}.x(end,:);
-    
-    
-    % get steady state l and D
-    steady_psens_openloop{traj_cntr}=round(det_steady_state_openloop(9+sim{traj_cntr}.num_het+1)); % sens is the first gene in the list
-    [steady_l_openloop{traj_cntr}, steady_D_openloop{traj_cntr}] = get_predist(sim_openloop{traj_cntr},det_steady_state_openloop); % get the pre-disturbance l and D values
-    
-    % SET the initial condition according to the deterministic steady state
-    
-    % mRNAs
-    sim_openloop{traj_cntr}.init_conditions('m_a')=det_steady_state_openloop(1);
-    sim_openloop{traj_cntr}.init_conditions('m_r')=det_steady_state_openloop(2);
-    % proteins
-    sim_openloop{traj_cntr}.init_conditions('p_a')=det_steady_state_openloop(3);
-    sim_openloop{traj_cntr}.init_conditions('R')=det_steady_state_openloop(4);
-    % tRNAs
-    sim_openloop{traj_cntr}.init_conditions('tc')=det_steady_state_openloop(5);
-    sim_openloop{traj_cntr}.init_conditions('tu')=det_steady_state_openloop(6);
-    % inactivated ribosomes
-    sim_openloop{traj_cntr}.init_conditions('Bcm')=det_steady_state_openloop(7);
-    % nutrient quality and chloramphenicol
-    sim_openloop{traj_cntr}.init_conditions('s')=det_steady_state_openloop(8);
-    sim_openloop{traj_cntr}.init_conditions('h')=det_steady_state_openloop(9);
-    
-    % heterologous
-    x_het=det_steady_state_openloop(10 : (9+2*sim_openloop{traj_cntr}.num_het+sim_openloop{traj_cntr}.num_misc) );
-    for j=1:sim_openloop{traj_cntr}.num_het
-        % mRNA
-        sim_openloop{traj_cntr}.init_conditions(['m_',sim_openloop{traj_cntr}.het.names{j}])=x_het(j);
-        % protein
-        sim_openloop{traj_cntr}.init_conditions(['p_',sim_openloop{traj_cntr}.het.names{j}])=x_het(sim_openloop{traj_cntr}.num_het+j);
-    end
-    % miscellaneous
-    for j=1:sim_openloop{traj_cntr}.num_misc
-        sim_openloop{traj_cntr}.init_conditions([sim_openloop{traj_cntr}.het.misc_names{j}])=x_het(2*sim_openloop{traj_cntr}.num_het+j);
-    end
-    
-    % SIMULATE stochastic trajectories
-    sim_openloop{traj_cntr} = sim_openloop{traj_cntr}.simulate_model_hybrid_tauleap;
-    
-    dist_time=sim_openloop{traj_cntr}.ext.input_func_parameters('step_time'); % time of disturbance
-    
-    % calculate l and D
-    calculated_openloop=calc(sim_openloop{traj_cntr},sim_openloop{traj_cntr}.x,sim_openloop{traj_cntr}.t);
-
-    % record trajectories
-    ts_openloop{traj_cntr}=sim_openloop{traj_cntr}.t;
-    psens_trajs_openloop{traj_cntr}=sim_openloop{traj_cntr}.x(:,9+sim_openloop{traj_cntr}.num_het+1);
-    l_trajs_openloop{traj_cntr}=(calculated_openloop.ls);
-    D_trajs_openloop{traj_cntr}=(calculated_openloop.Ds);
+%     sim_openloop{traj_cntr}=cell_simulator;
+% 
+%     sim_openloop{traj_cntr}.init_conditions('s')=sim{traj_cntr}.init_conditions('s');
+%     
+%     sim_openloop{traj_cntr}=sim_openloop{traj_cntr}.load_heterologous_and_external('aif_controller','step_inducer'); % load the het. gene and ext. inp. modules
+%     sim_openloop{traj_cntr}=sim_openloop{traj_cntr}.generate_het_stoichiometry_matrix();
+%     
+%     % disturbance signal parameters
+%     sim_openloop{traj_cntr}.ext.input_func_parameters('inducer_base_level')=sim{traj_cntr}.ext.input_func_parameters('inducer_base_level');
+%     sim_openloop{traj_cntr}.ext.input_func_parameters('inducer_final_level')=sim{traj_cntr}.ext.input_func_parameters('inducer_final_level');
+%     sim_openloop{traj_cntr}.ext.input_func_parameters('step_time')=sim{traj_cntr}.ext.input_func_parameters('step_time');
+%     sim_openloop{traj_cntr}.ext.input_func_parameters('slope_duration')=sim{traj_cntr}.ext.input_func_parameters('slope_duration');
+%     
+%     sim_openloop{traj_cntr}.het.parameters('c_dist')=sim{traj_cntr}.het.parameters('c_dist');
+%     sim_openloop{traj_cntr}.het.parameters('a_dist')=sim{traj_cntr}.het.parameters('a_dist');
+%     
+%     % no output protein expression here
+%     sim_openloop{traj_cntr}.het.parameters('c_x')=sim{traj_cntr}.het.parameters('c_x');
+%     sim_openloop{traj_cntr}.het.parameters('a_x')=sim{traj_cntr}.het.parameters('a_x');
+%     
+%     % integral controller parameters
+%     sim_openloop{traj_cntr}.het.parameters('K_dna(anti)-sens')=sim{traj_cntr}.het.parameters('K_dna(anti)-sens');
+%     sim_openloop{traj_cntr}.het.parameters('eta_dna(anti)-sens')=sim{traj_cntr}.het.parameters('eta_dna(anti)-sens');
+%     
+%     sim_openloop{traj_cntr}.het.parameters('K_dna(amp)-act')=sim{traj_cntr}.het.parameters('K_dna(amp)-act');
+%     sim_openloop{traj_cntr}.het.parameters('eta_dna(amp)-act')=sim{traj_cntr}.het.parameters('eta_dna(amp)-act');
+%     
+%     sim_openloop{traj_cntr}.het.parameters('kb_anti')=sim{traj_cntr}.het.parameters('kb_anti'); % atcuator-annihilator binding rate constant
+%     sim_openloop{traj_cntr}.het.parameters('c_sens')=sim{traj_cntr}.het.parameters('c_sens');
+%     sim_openloop{traj_cntr}.het.parameters('a_sens')=sim{traj_cntr}.het.parameters('a_sens'); % sensor gene transcription rate
+% 
+%     % all other controller genes on zero
+%     sim_openloop{traj_cntr}.het.parameters('c_anti')=0; % annigilator transcription rate
+%     sim_openloop{traj_cntr}.het.parameters('c_act')=0; % actuator transcription rate
+%     sim_openloop{traj_cntr}.het.parameters('c_amp')=0; % integral controller amplifier gene copy number
+%        
+%     % push amended parameter values
+%     sim_openloop{traj_cntr}=sim_openloop{traj_cntr}.push_het();
+%     
+%     % STOCHASTIC simulation parameters
+%     sim_openloop{traj_cntr}.tf=sim{traj_cntr}.tf; % simulation time frame
+%     sim_openloop{traj_cntr}.record_time_step=sim{traj_cntr}.record_time_step;
+%     sim_openloop{traj_cntr}.tau_step=sim{traj_cntr}.tau_step;
+%     
+%     % GET the steady state deterministically to avopid waiting for the system to equilibrate in Gillespie simulations
+%     % deterministic simulation parameters
+%     sim_openloop{traj_cntr}.opt = odeset('reltol',1.e-6,'abstol',1.e-9);
+%     
+%     % 24h to get steady state
+%     tf_original=sim_openloop{traj_cntr}.tf;
+%     sim_openloop{traj_cntr}.tf=24;
+%     
+%     % no disturbance
+%     inducer_base_level_original=sim_openloop{traj_cntr}.ext.input_func_parameters('inducer_base_level');
+%     inducer_final_level=sim_openloop{traj_cntr}.ext.input_func_parameters('inducer_final_level');
+%     sim_openloop{traj_cntr}.ext.input_func_parameters('inducer_base_level') = 0;
+%     sim_openloop{traj_cntr}.ext.input_func_parameters('inducer_final_level') = 0;
+%     
+%     % simulate and get steady state
+%     sim_openloop{traj_cntr}=sim_openloop{traj_cntr}.generate_het_stoichiometry_matrix();
+%     sim_openloop{traj_cntr}=sim_openloop{traj_cntr}.simulate_model();
+%     
+%     % restore simulation time frame
+%     sim_openloop{traj_cntr}.tf=tf_original;
+%     
+%     % restore distrubance parameters
+%     sim_openloop{traj_cntr}.ext.input_func_parameters('inducer_base_level') = inducer_base_level_original;
+%     sim_openloop{traj_cntr}.ext.input_func_parameters('inducer_final_level') = inducer_final_level;
+% 
+%     % get steady state
+%     det_steady_state_openloop = sim_openloop{traj_cntr}.x(end,:);
+%     
+%     
+%     % get steady state l and D
+%     steady_psens_openloop{traj_cntr}=round(det_steady_state_openloop(9+sim{traj_cntr}.num_het+1)); % sens is the first gene in the list
+%     [steady_l_openloop{traj_cntr}, steady_D_openloop{traj_cntr}] = get_predist(sim_openloop{traj_cntr},det_steady_state_openloop); % get the pre-disturbance l and D values
+%     
+%     % SET the initial condition according to the deterministic steady state
+%     
+%     % mRNAs
+%     sim_openloop{traj_cntr}.init_conditions('m_a')=det_steady_state_openloop(1);
+%     sim_openloop{traj_cntr}.init_conditions('m_r')=det_steady_state_openloop(2);
+%     % proteins
+%     sim_openloop{traj_cntr}.init_conditions('p_a')=det_steady_state_openloop(3);
+%     sim_openloop{traj_cntr}.init_conditions('R')=det_steady_state_openloop(4);
+%     % tRNAs
+%     sim_openloop{traj_cntr}.init_conditions('tc')=det_steady_state_openloop(5);
+%     sim_openloop{traj_cntr}.init_conditions('tu')=det_steady_state_openloop(6);
+%     % inactivated ribosomes
+%     sim_openloop{traj_cntr}.init_conditions('Bcm')=det_steady_state_openloop(7);
+%     % nutrient quality and chloramphenicol
+%     sim_openloop{traj_cntr}.init_conditions('s')=det_steady_state_openloop(8);
+%     sim_openloop{traj_cntr}.init_conditions('h')=det_steady_state_openloop(9);
+%     
+%     % heterologous
+%     x_het=det_steady_state_openloop(10 : (9+2*sim_openloop{traj_cntr}.num_het+sim_openloop{traj_cntr}.num_misc) );
+%     for j=1:sim_openloop{traj_cntr}.num_het
+%         % mRNA
+%         sim_openloop{traj_cntr}.init_conditions(['m_',sim_openloop{traj_cntr}.het.names{j}])=x_het(j);
+%         % protein
+%         sim_openloop{traj_cntr}.init_conditions(['p_',sim_openloop{traj_cntr}.het.names{j}])=x_het(sim_openloop{traj_cntr}.num_het+j);
+%     end
+%     % miscellaneous
+%     for j=1:sim_openloop{traj_cntr}.num_misc
+%         sim_openloop{traj_cntr}.init_conditions([sim_openloop{traj_cntr}.het.misc_names{j}])=x_het(2*sim_openloop{traj_cntr}.num_het+j);
+%     end
+%     
+%     % SIMULATE stochastic trajectories
+%     sim_openloop{traj_cntr} = sim_openloop{traj_cntr}.simulate_model_hybrid_tauleap;
+%     
+%     dist_time=sim_openloop{traj_cntr}.ext.input_func_parameters('step_time'); % time of disturbance
+%     
+%     % calculate l and D
+%     calculated_openloop=calc(sim_openloop{traj_cntr},sim_openloop{traj_cntr}.x,sim_openloop{traj_cntr}.t);
+% 
+%     % record trajectories
+%     ts_openloop{traj_cntr}=sim_openloop{traj_cntr}.t;
+%     psens_trajs_openloop{traj_cntr}=sim_openloop{traj_cntr}.x(:,9+sim_openloop{traj_cntr}.num_het+1);
+%     l_trajs_openloop{traj_cntr}=(calculated_openloop.ls);
+%     D_trajs_openloop{traj_cntr}=(calculated_openloop.Ds);
 end
 toc
 

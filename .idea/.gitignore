@@ -13,3 +13,5 @@
 # saved matlab data and plots
 *.mat
 *.fig
+# GitHub Copilot persisted chat sessions
+/copilot/chatSessions
