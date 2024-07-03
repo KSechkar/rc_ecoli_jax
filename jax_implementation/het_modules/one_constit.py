@@ -73,8 +73,10 @@ def initialise():
 
 ## transcription regulation functions
 def F_calc(t ,x, par, name2pos):
+    # --------  SPECIFY THE TRANSCRIPTION REGULATION FUNCTION FROM HERE...
     F_xtra = 1 # constitutive gene
     return jnp.array([F_xtra])
+    # -------- ...TO HERE
 
 ## ODE
 def ode(F_calc,     # calculating the transcription regulation functions
@@ -88,13 +90,14 @@ def ode(F_calc,     # calculating the transcription regulation functions
     # GET REGULATORY FUNCTION VALUES
     F = F_calc(t, x, par, name2pos)
 
-    # RETURN THE ODE
+    # --------  SPECIFY THE ODE FROM HERE...
     return [# mRNAs
             par['func_xtra'] * l * F[name2pos['F_xtra']] * par['c_xtra'] * par['a_xtra'] - (par['b_xtra'] + l) * x[name2pos['m_xtra']] \
                 - par['kcm']*par['h_ext']*(x[name2pos['m_xtra']] / k_het[name2pos['k_xtra']] / D) * R,
             # proteins
             (e / par['n_xtra']) * (x[name2pos['m_xtra']] / k_het[name2pos['k_xtra']] / D) * R - (l + par['d_xtra']) * x[name2pos['p_xtra']]
     ]
+    # -------- ...TO HERE
 
 ## stochastic reaction propensities for hybrid tau-leaping simulations
 def v(F_calc,     # calculating the transcription regulation functions
@@ -109,7 +112,7 @@ def v(F_calc,     # calculating the transcription regulation functions
     # GET REGULATORY FUNCTION VALUES
     F = F_calc(t, x, par, name2pos)
 
-    # RETURN THE PROPENSITIES
+    # --------  SPECIFY THE PROPENSITIES FROM HERE...
     return [
             # synthesis, degradation, dilution of xtra gene mRNA
             par['func_xtra'] * l * F[name2pos['F_xtra']] * par['c_xtra'] * par['a_xtra'] / mRNA_count_scales[name2pos['mscale_xtra']],
@@ -122,3 +125,4 @@ def v(F_calc,     # calculating the transcription regulation functions
             par['d_xtra'] * x[name2pos['p_xtra']],
             l * x[name2pos['p_xtra']]
     ]
+    # -------- ...TO HERE
