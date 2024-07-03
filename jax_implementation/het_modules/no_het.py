@@ -42,6 +42,7 @@ def v(F_calc,     # calculating the transcription regulation functions
             e, l, # translation elongation rate, growth rate
             R, # ribosome count in the cell, resource
             k_het, D, # effective mRNA-ribosome dissociation constants for synthetic genes, resource competition denominator
+            mRNA_count_scales, # scaling factors for mRNA counts
             par,  # system parameters
             name2pos
             ):

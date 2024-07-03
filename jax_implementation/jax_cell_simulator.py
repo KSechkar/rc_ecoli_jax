@@ -1744,12 +1744,12 @@ def main():
         oneconstit_v)
 
     # burdensome gene
-    par['c_xtra'] = 0.0
-    par['a_xtra'] = 1000.0
+    par['c_xtra'] = 100.0
+    par['a_xtra'] = 5000.0
 
     # culture medium
     init_conds['s'] = 0.5
-    par['h_ext']=2000
+    #par['h_ext']=2000
     # DETERMINISTIC SIMULATION TO FIND THE STARTING STEADY STATE
     # set simulation parameters
     tf = (0, 50)  # simulation time frame
