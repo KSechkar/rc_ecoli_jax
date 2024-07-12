@@ -261,13 +261,13 @@ class CellModelAuxiliary:
         # plot mass of inactivated ribosomes
         if ((xs[:, 7] != 0).any()):
             bottom_line = top_line
-            top_line = bottom_line + xs[:, 7]
+            top_line = bottom_line + xs[:, 7] * par['n_r']
             mass_figure.patch(np.concatenate((ts, flip_t)), np.concatenate((bottom_line, np.flip(top_line))),
                               line_width=0.5, line_color='black', fill_color=self.gene_colours['h'], legend_label='R:h')
 
         # plot mass of active ribosomes - only if there are any to begin with
         bottom_line = top_line
-        top_line = bottom_line + xs[:, 3]
+        top_line = bottom_line + xs[:, 3] * par['n_r']
         mass_figure.patch(np.concatenate((ts, flip_t)), np.concatenate((bottom_line, np.flip(top_line))),
                           line_width=0.5, line_color='black', fill_color=self.gene_colours['r'],
                           legend_label='R (free)')
